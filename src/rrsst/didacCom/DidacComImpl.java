@@ -69,26 +69,68 @@ public class DidacComImpl implements IDidacCom
     private static final int N_REINTENTOS = 3;
 
     @Override
-    public void enviar(IDUDidacCom idu) 
+       public void enviar(IDUDidacCom idu) 
             throws ExcepcionDidacCom, IllegalArgumentException
     {
         int tries= 0;
+        byte tipoRecibido = 0;
+        byte longitudRecibido =0;
+
+		
         if (canal== null)
         {
             throw new ExcepcionDidacCom("No se ha abierto el canal");   
         }
         try{
         do{
-            int puerto = idu.getPuertoUDP();//Puerto contenido en la IDU
-            byte[] datos = idu.getDatos();  //Byte de datos contenidos en la IDU
-            int longDatos = idu.getLongDatos(); //Longuitud que tienen los datos
-            String IP = idu.getDirIP();     //String IP contenida en la IDU
+        	tries++;
+        	byte[] datos2 = new byte[MIN_LONG_PDU];
+        	byte[] datos = new byte[MAX_LONG_PDU];
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+     		DataOutputStream out = new DataOutputStream(baos);
+        	int puerto = idu.getPuertoUDP();//Puerto contenido en la IDU
             
+        	int longDatos = idu.getLongDatos(); //Longuitud que tienen los datos
+            String IP = idu.getDirIP();     //String IP contenida en la IDU
+            //Se genera la PDU de datos
+            out.write(PDU_DATOS);
+            out.write(longDatos);
+            out.write(idu.getDatos());
+            
+            datos = baos.toByteArray();
+            out.write (GestorHash.generarHash(datos));
+            datos = baos.toByteArray();
+                      
             //Se traduce el String IP a un InetAdress
-            DatagramPacket datagrama = new DatagramPacket(datos, longDatos, 
+            DatagramPacket datagrama = new DatagramPacket(datos, datos.length, 
                                             InetAddress.getByName(IP), puerto);
+            DatagramPacket datagrama2 = new DatagramPacket(datos2,MIN_LONG_PDU);
             canal.send(datagrama);
-            }while (tries<=N_REINTENTOS);//&& (pduControl.getTipo() == PDU.PDU_NACK));
+            canal.receive(datagrama2);
+            datos2 = datagrama2.getData();
+            
+            ByteArrayInputStream bais = new ByteArrayInputStream(datos2);
+            DataInputStream in = new DataInputStream(bais);
+            
+            if(comprobarHash(datos2,MIN_LONG_PDU))
+            {
+            	tipoRecibido = in.readByte();
+            	if ((tipoRecibido !=PDU_NACK) && (tipoRecibido != PDU_NACK))
+            							throw new ExcepcionDidacCom("Error de protocolo");
+            	longitudRecibido= in.readByte(); 
+            	if(longitudRecibido != 0)
+            			throw new ExcepcionDidacCom("Error de protocolo");
+            	
+  
+            }
+            else             
+            	throw new ExcepcionDidacCom("Error comunicacion");
+            
+     
+            }while (tries<N_REINTENTOS && (tipoRecibido == PDU_NACK));//&& (pduControl.getTipo() == PDU.PDU_NACK));
+        if(tipoRecibido == PDU_NACK && tries == 3)
+			throw new ExcepcionDidacCom("Error Comunicacion");
+        
         
 	}catch(IOException e) 
         {
