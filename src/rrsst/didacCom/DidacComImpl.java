@@ -144,29 +144,36 @@ public class DidacComImpl implements IDidacCom
                 canal.receive(ControlDatagram); //Recibo del datagrama PDUControl
 
                 //Si el hash de no es correcto    
-		if (!comprobarHash(PDUControl, MIN_LONG_PDU)) 
-                    throw new ExcepcionDidacCom ("Intento "+tries+" Hash de la "
-                            + "PDU de control incorrecto");
-                else //Si lo es
-                {
-                    ByteArrayInputStream bais = new ByteArrayInputStream(PDUControl);
-                    PDUType= DataIn.readByte();        //Copia el tipo de PDU
-                    lengthData= DataIn.readByte();     //Copia la long. de datos
+		if(PDUControl.length != 18)
+			throw new ExcepcionDidacCom("Intento "+tries+".Longitud de PDU de" +
+				"control erronea ["+PDUControl.length+"]");
+		else{
+			
+		
+			if (!comprobarHash(PDUControl, MIN_LONG_PDU)) 
+              	 	     throw new ExcepcionDidacCom ("Intento "+tries+" Hash de la "
+              	 	             + "PDU de control incorrecto");
+             	  	 else //Si lo es
+               		 {
+                  		  bais = new ByteArrayInputStream(PDUControl);
+                  		  PDUType= DataIn.readByte();        //Copia el tipo de PDU
+                  		  lengthData= DataIn.readByte();     //Copia la long. de datos
                     
-                    if ((PDUType!= PDU_NACK)&&(PDUType!= PDU_ACK)) 
-                    {
-                        throw new ExcepcionDidacCom ("Intento "+tries+". El "
-                                + "campo de confirmacion tiene un valor "
-                                + "desconocido ["+PDUType+"]");
-                    }else{
-                        if(lengthData!= PDU_DATOS) //Valor a tener en PDUControl
-                            throw new ExcepcionDidacCom("Intento "+tries+". El "
-                                    + "valor del campo longitud de datos, no es"
-                                    + " correcto");
-                    }
-                }
+                  		  if ((PDUType!= PDU_NACK)&&(PDUType!= PDU_ACK)) 
+                   		 {
+                    		    throw new ExcepcionDidacCom ("Intento "+tries+". El "
+                    		            + "campo de confirmacion tiene un valor "
+                   		             + "desconocido ["+PDUType+"]");
+                  		  }else{
+                  		      if(lengthData!= PDU_DATOS) //Valor a tener en PDUControl
+                  		          throw new ExcepcionDidacCom("Intento "+tries+". El "
+                  		                  + "valor del campo longitud de datos, no es"
+                  		                  + " correcto");
+                    		}
+                	}
+		}
                 
-            }while ((tries< N_REINTENTOS) && (PDUType == PDU_NACK));
+            }while ((tries<= N_REINTENTOS) && (PDUType == PDU_NACK));
         
         }catch(IOException e) 
         {
