@@ -72,14 +72,29 @@ public class DidacComImpl implements IDidacCom
     */	
     private static final int N_REINTENTOS = 3;
 
+    /**&nbsp&nbsp &#201ste m&#233todo se encarga de recibir una IDU del nivel 
+     * superior ClienteUDP, realizar un c&#243digo <i>MD5</i>&nbspe 
+     * incorporar&#225  todo a una PDU que enviar&#225 m&#225s tarde a su 
+     * entidad par.<br>
+     * </br>&nbsp&nbsp Una vez enviada la PDU, esperar&#225 de vuelta la 
+     * confirmaci&#243n de que ha llegado correctamente. Si no es as&#237,
+     * reintentar&#225 el env&#237o un m&#225ximo de 3 veces. Para cualquier 
+     * otro caso, se devuelve una excepci&#243n de tipo <b>ExcepcionDidacCom</b>.
+     * 
+     * @param idu IDU del nivel superior
+     * @throws ExcepcionDidacCom En caso de cualquier error.
+     * @throws IllegalArgumentException 
+     */
+    
     @Override
     public void enviar(IDUDidacCom idu) 
-            throws ExcepcionDidacCom, IllegalArgumentException
+                            throws ExcepcionDidacCom, IllegalArgumentException
     {
         int tries= 0;   //Numero de intentos
         byte PDUType;   //Tipo de PDU que se recibirá
         byte lengthData;//Longitud del campo datos del usuario
         try{
+            //Bytes destinados a albergar PDU´s de tipo datos y control
             byte[] PDUControl= new byte [MIN_LONG_PDU];
             byte[] PDUData;
             
@@ -91,16 +106,11 @@ public class DidacComImpl implements IDidacCom
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream DataOut = new DataOutputStream(baos);
             
-            //Abrir un stream para leer info en PDUControl más adelante  
-            ByteArrayInputStream bais = null;
-            DataInputStream DataIn = new DataInputStream(bais);
-            
-            tries++;     //Número de reintentos
             //Extraer datos de la IDU recibida
             int port = idu.getPuertoUDP();      //Puerto contenido en la IDU
             int longDatos = idu.getLongDatos(); //Longuitud de los datos
             //Byte de datos  en la IDU
-            byte[] datos = Arrays.copyOfRange(idu.getDatos(),0,longDatos);
+            byte[] datos = Arrays.copyOfRange(idu.getDatos(),0,longDatos);      
             String IP = idu.getDirIP();         //String IP en la IDU
             
             /*Primer paso, crear una PDU de datos. Su estructura es la 
@@ -116,226 +126,211 @@ public class DidacComImpl implements IDidacCom
             //Se copia a PDUData
             PDUData = baos.toByteArray();
             /*El Hash se calculará para todos los campos serializados de la 
-            PDU, a la ver que se copia en el Stream DataOut.*/
+            PDU, a la ver que se copia en el Stream DataOut.
+            */
             DataOut.write (GestorHash.generarHash(PDUData));
             //Se copia a PDUData
             PDUData = baos.toByteArray();
-            
-            //Se crea un datagrama que enviará la PDU de datos PDUData
-            DatagramPacket datagrama = new DatagramPacket(PDUData, 
-                    PDUData.length, InetAddress.getByName(IP), port);
-            
-            /*Segundo paso, crear una PDU de control. Su estructura es la 
-             * siguiente:
-             * _____________________________________
-             * |Tipo PDU|Long.Datos | Datos |  MD5  |
-             * |0xFF/FE |   0x00    |0 bytes| 16 B  |
-             * -------------------------------------
-             * Dicha PDUControl se usará para recibir el ACK/NACK de la 
-             * entidad par.
-            */
-            //Se crea un datagrama que reciba dicha confirmación
-            DatagramPacket ControlDatagram = new DatagramPacket(PDUControl,
+            do{
+                tries++;
+                //Se crea un datagrma que envíe la PDU de datos PDUData
+                DatagramPacket datagrama = new DatagramPacket(PDUData, 
+                            PDUData.length, InetAddress.getByName(IP), port);
+                canal.send(datagrama);  //Envío del datagrama con PDUData
+                
+                /*Segundo paso, crear una PDU de control. Su estructura es la 
+                 * siguiente:
+                 * _____________________________________
+                 * |Tipo PDU|Long.Datos | Datos |  MD5  |
+                 * |0xFF/FE |   0x00    |0 bytes| 16 B  |
+                 * -------------------------------------
+                 * Dicha PDUControl se usará para recibir el ACK/NACK de la 
+                 * entidad par.
+                */
+                //Se crea un datagrama que reciba dicha confirmación
+                DatagramPacket ControlDatagram= new DatagramPacket(PDUControl,
                                                                   MIN_LONG_PDU);
-            
-            //Se enviará y reenviará si la recepción no es correcta
-            do{      
-                canal.send(datagrama);         //Envío del datagrama con PDUData
-                canal.receive(ControlDatagram); //Recibo del datagrama PDUControl
-		//Si el tamaño de la PDUControl es distinto a MIN_LOG_PDU
-		if(Controldatagrama.length()!=MIN_LONG_PDU)
+                canal.receive(ControlDatagram);
+                //Abrir un stream para leer info en PDUControl más adelante  
+                ByteArrayInputStream bais= new ByteArrayInputStream(PDUControl);
+                DataInputStream DataIn= new DataInputStream(bais);
+                /*Primero se comprueba si su longitud es correcta, para después
+                 * validar su código hash y más tarde determinar si los campos
+                 * tipo y longitud datos son correctos*/
+		if(ControlDatagram.getLength()!=MIN_LONG_PDU)
 		{
-			throw new ExcepcionDidacCom ("");
+			throw new ExcepcionDidacCom ("La longitud no es la "
+                               + "esperada ["+ControlDatagram.getLength()+"].");
 		}else{
-                	//Si el hash de no es correcto    
-			if (!comprobarHash(PDUControl, MIN_LONG_PDU)) 
+                    //Si el hash de no es correcto    
+                    if (!comprobarHash(PDUControl, MIN_LONG_PDU)) 
                     	throw new ExcepcionDidacCom ("Intento "+tries+" Hash de la "
                             	+ "PDU de control incorrecto");
-                	else{ //Si lo es
-                    		ByteArrayInputStream bais = new ByteArrayInputStream(PDUControl);
-                    		PDUType= DataIn.readByte();        //Copia el tipo de PDU
-                    		lengthData= DataIn.readByte();     //Copia la long. de datos
+                    else{ //Si lo es
+                        PDUType= DataIn.readByte();        //Copia el tipo de PDU
+                        lengthData= DataIn.readByte();     //Copia la long. de datos
                     
-                    		if ((PDUType!= PDU_NACK)&&(PDUType!= PDU_ACK)) 
-                    		{
-                        	throw new ExcepcionDidacCom ("Intento "+tries+". El "
+                        if ((PDUType!= PDU_NACK)&&(PDUType!= PDU_ACK)) 
+                        {
+                            throw new ExcepcionDidacCom ("Intento "+tries+". El "
                                 + "campo de confirmacion tiene un valor "
                                 + "desconocido ["+PDUType+"]");
-                    		}else{
-                        	if(lengthData!= PDU_DATOS) //Valor a tener en PDUControl
-                            	throw new ExcepcionDidacCom("Intento "+tries+". El "
+                    	}else{
+                            if(lengthData!= PDU_DATOS) //Valor a tener en PDUControl
+                                throw new ExcepcionDidacCom("Intento "+tries+". El "
                                     	+ "valor del campo longitud de datos, no es"
                                     	+ " correcto");
-                    		}
-                   	 	if((tries > N_REINTENTOS) && (PDUType == PDU_NACK))
-		    		{
-		    			throw new ExcepcionDidacCom("Intento "+tries+". Numero limite de" +
-							"retransmisiones alcanzado");
-		    		}
-                	}
+                    	}
+                   	
+                    }
                 	
-                	}
+                }		
+		if((tries > N_REINTENTOS) && (PDUType == PDU_NACK))
+		{
+                    throw new ExcepcionDidacCom("Intento "+tries+". Numero "
+                            + "limite de retransmisiones alcanzado");
+		}
+				
                 
-            }while ((tries<= N_REINTENTOS) && (PDUType == PDU_NACK));
+                }while ((tries<=N_REINTENTOS) && (PDUType == PDU_NACK));
         
         }catch(IOException e) 
         {
             throw new ExcepcionDidacCom("Ha habido un error");
-        }
-        
-        
+        }      
     }
         
-        @Override
+    /*&nbsp&nbsp &#201ste m&#233todo se encarga de recibir una PDU de la 
+     * entidad par, comprobando su c&#243digo <i>MD5</i>&nbsp que 
+     * incorporar&#225  todo a una PDU que enviar&#225 m&#225s tarde a su 
+     * entidad par.<br>
+     * </br>&nbsp&nbsp Una vez procesada la PDU, enviar&#225 de vuelta la 
+     * confirmaci&#243n de que ha llegado correctamente. Si ha recibido una PDU,
+     * mal, tras enviar una confirmaci&@243n negativa, esperar&#225 la 
+     * retransmisi&#243n de ese mismo paquete. Para cualquier 
+     * otro caso, se devuelve una excepci&#243n de tipo <b>ExcepcionDidacCom</b>.
+     * 
+     * @return Devuelve la PDU recibida sin errores.
+     * @throws ExcepcionDidacCom 
+     */
+
+    @Override
     public IDUDidacCom recibir() throws ExcepcionDidacCom
-        {
-            IDUDidacCom idu;
-            byte[] datos = new byte[20];
-            DatagramPacket datagrama = new DatagramPacket(datos,20);
-            try
-            {
-                canal.receive(datagrama);
-                idu = new IDUDidacCom (datagrama.getAddress().getHostAddress(), 
-                        datagrama.getPort(), datagrama.getData(), 
-                        datagrama.getLength());
-            }catch (IOException e)   {throw new ExcepcionDidacCom("Error en la "
-                    + "recepción: " + e.getMessage());}
-            return idu;
-		
-		// Crear Datagrama UDP a enviar o recibir.
-
-		
-		// Crear el stream contenedor de la PDU a enviar.
-
-		
-		// Crear el stream contenedor de la PDU de confirmaci�n a recibir.
-
-		
-		// Validar que el canal se ha creado.
-
-		
-		// Inicializar el contador de reenv�os.
-
-		
-		// Validar que el parametro idu es correcto.
-
-
-		// Construir la PDU de datos del nivel DidacCom
-		// lanzando las excepciones oportunas
-
-		
-		// Entrar en el bluce de envio y recepci�n
-		// Salir cuando se reciba un ACK (transmisi�n correcta)
-		// o cuando se haya sobrepasado el n�mero m�ximo de reenvios
-		// por haber recibido sucesivos NACKs (transmisi�n incorrecta)
-		
-		// *******************************************************************************************
-		
-			// Contruir el datagrama que contenga la PDU de datos del nivel DidacCom
-			// lanzando las excepciones oportunas
-
-		
-			// Enviar el datagrama a trav�s del canal
-			// lanzando las excepciones oportunas
-			
-			
-			// Contruir el datagrama que contendr� la PDU ACK o NACK procedente del servidor
-			// lanzando las excepciones oportunas		
-			
-			
-			// Recibir el datagrama de respuesta trav�s del canal
-			// lanzando las excepciones oportunas
-			
-
-		
-			// Procesar la PDU recibida:
-			
-			// Comprobar que su longitud est� dentro del rango permitido
-			// lanzando las excepciones oportunas
-
-			
-			// Crear el stream de entrada que contendr� los bytes de la PDU recibida
-
-			
-			// Comprobar que el hash de la PDU recibida es correcto
-			// lanzando las excepciones oportunas
-			
-			// Comprobar que tipo de la PDU recibida es correcto (debe ser ACK o NACK)
-			// lanzando las excepciones oportunas
-			
-			// Comprobar que la longitud del campo datos de la PDU recibida es coherente con el tipo de pdu
-			// lanzando las excepciones oportunas
-			
-		// *******************************************************************************************
-		
-		
-		// Si finalmente se ha salido del bucle por "Transmisi�n incorrecta"
-		// lanzar las excepciones oportunas
-
-    
-
- 
+    {
+        IDUDidacCom idu;         //IDU que se facilitará al nivel superior   
+        int tries= 0;            //Número de intentos
+        byte PDUD_Type;          //Tipo de PDU que se recibirá
+        byte PDUC_Type= PDU_ACK; //Se inicializa a ACK y cambia si hay errores
+        byte lengthData= 0x00;   //Longitud del campo datos del usuario
+        int PDULength;           //Longitud de la PDU recibida
         
-		// Validar que el canal se ha creado.
-			
-		// Inicializar el contador de reenv�os ACKs enviados.
-		
-
-		// Entrar en el bluce de recepci�n y env�o
-		// Salir cuando se haya sobrepasado el n�mero m�ximo de NACKs enviados
-		// o cuando el hash de la PDU recibida sea incorrecto (errores de transmisi�n)
-		
-		// *******************************************************************************************		
-		
-			// Recibir el datagrama
-			// lanzando las excepciones oportunas
-	
-			
-			// Procesar la PDU recibida:
-			
-			// Comprobar que su longitud est� dentro del rango permitido
-			// lanzando las excepciones oportunas
-			
-
-			// Comprobar que el hash de la PDU recibida es correcto
-			// lanzando las excepciones oportunas		
-			
-			
-			//Si el hash es correcto
-			
-				// Se comprueba que la PDU recibida sea de datos y con una longitud coherente
-				// lanzando las excepciones oportunas
-				// Si todas las comprobaciones son correctas 
-				// el tipo de la PDU de respuesta sera ACK.
-			
-			// Si el hash no es correcto
-			
-				// el tipo de la PDU de respuesta sera NACK.
-			
-
-			// Generar la PDU de respuesta a enviar, ACK o NACK dependiendo de si el
-			// hash de la PDU recibida ha sido correcto o no.
-			
-
-			// Enviar la PDU de confirmacion a trav�s del canal.
-
-		// *******************************************************************************************		
-		
-		// Si finalmente se ha salido del bucle por alg�n hash incorrecto
-		// lanzar las excepciones oportunas		
-		
-		
-		// Si finalmente se ha salido del bucle por exceder el n�mero de NACKs enviados
-		// lanzar las excepciones oportunas		
-		
-		
-		// Si se llega hasta aqu� es que la recepci�n de la PDU de datos ha sido correcta
-		// y se ha enviado ACK
-		
-		// Componer la IDU para nivel superior		
-        }        
- 
-	
+         //Abrir un stream para copiar info en PDUControl más adelante           
+         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         DataOutputStream DataOut = new DataOutputStream(baos);
+        
+        try{
+            /* Arrays de bytes destinados a albergar PDU´s de tipo datos y 
+             * control*/
+            byte[] PDUControl= new byte [MIN_LONG_PDU];
+            byte[] PDUData= new byte [MAX_LONG_PDU];
+            
+            if (canal== null)
+            {
+                throw new ExcepcionDidacCom("No se ha abierto el canal");   
+            }
+            /*Array de bytes donde albergar la PDU tipo datos contenida en un 
+            * datagrama a su llegada*/
+            DatagramPacket datagrama= new DatagramPacket(PDUData, MAX_LONG_PDU);
+            do{
+                tries++;
+                
+                /*   Primer paso, recibir una PDU de datos. Su estructura es la 
+                * siguiente:
+                *           _____________________________________
+                *           |Tipo PDU|Long.Datos |Datos |  MD5  |
+                *           |  0x00  |  1 byte   |0-20B | 16 B  |
+                *           -------------------------------------
+                */ 
+                canal.receive(datagrama);   //Se recibe el datagrama
+                
+                /*    Después se comprueba si su longitud es correcta, para 
+                * después validar su código hash y más tarde determinar si los 
+                * campos tipo y longitud datos son correctos. Si hay algún 
+                * error, se enviará de vuelta una confirmación negativa. 
+                *    Por tanto, la estructura de la PDU de control es la 
+                * siguiente:
+                *           _____________________________________
+                *           |Tipo PDU|Long.Datos | Datos |  MD5  |
+                *           |0xFF/FE |   0x00    |0 bytes| 16 B  |
+                *           -------------------------------------
+                *    Cuyo campo Tipo PDU variará en función de si se detecta 
+                * algún error según se van comprobando.
+                */
+                PDULength= datagrama.getLength();
+                if(PDULength<MIN_LONG_PDU)  PDUC_Type=PDU_NACK;
+                else{
+                /*Si el hash no es correcto, o si en comprobarHash salta una 
+                 * excepción porque el campo longitud datos no se corresponde
+                 * con el debido, se creará un NACK*/
+                    try{
+                        if (!comprobarHash(PDUData, PDULength)) 
+                            PDUC_Type= PDU_NACK;
+                    }catch (ExcepcionDidacCom e)   {PDUC_Type=PDU_NACK;}
+                    
+                    if (PDUC_Type!= PDU_NACK) //Para saltarse código si no.
+                    {
+                        //Abrir un stream para leer info en PDUData
+                        ByteArrayInputStream bais= 
+                                           new ByteArrayInputStream(PDUControl);
+                        DataInputStream DataIn= new DataInputStream(bais);
+                        PDUD_Type = DataIn.readByte(); //Copia el tipo de PDU
+                        lengthData= DataIn.readByte(); //Copia la long. de datos
+                        //Si no es de tipo datos
+                        if ((PDUD_Type!= PDU_DATOS))   PDUC_Type= PDU_NACK;
+                    }
+                }
+                //Serializar los datos para crear la PDU de control
+                DataOut.write(PDUC_Type);    //Campo Tipo
+                DataOut.write(PDU_DATOS);    //Campo "longitud de los datos" = 0
+                PDUControl = baos.toByteArray();
+                /*El Hash se calculará para todos los campos serializados de 
+                * PDUControl, a la vez que se copia en el Stream DataOut.*/
+                DataOut.write (GestorHash.generarHash(PDUControl));
+                //Se serializa en PDUControl
+                PDUControl = baos.toByteArray();
+                //Se crea un datagrama que envíe la PDU de control
+                DatagramPacket ControlDatagram = new DatagramPacket(PDUControl,
+                                                                  MIN_LONG_PDU);
+                canal.send(ControlDatagram);    //Se envía la confirmación
+    
+            }while ((tries<= N_REINTENTOS) && (PDUC_Type== PDU_NACK));
+            
+            /* Si todo ha ido bien, se devolverá una IDU al nivel superior, 
+             * creada a continuación. En caso contrario se lanzará una 
+             * excepción indicando que se ha superado el número de reintentos*/
+            if (PDUC_Type== PDU_NACK)
+            {
+                throw new ExcepcionDidacCom ("Error al recibir la PDU, se ha "
+                        + "superado el numero de reintentos");
+            }else
+            {
+               //Extraer datos de la PDU de datos y el datagrama que lo contenía
+               int port = datagrama.getPort();              //Puerto para la IDU
+               String IP = datagrama.getAddress().toString();//IP para la IDU 
+               //lengthData es la longitud del campo datos 
+               //Byte de datos  en la IDU
+               byte[] datos = Arrays.copyOfRange(PDUData, 1,lengthData);
+               //Se forma la IDU con la información obtenida
+               idu = new IDUDidacCom(IP, port, datos, lengthData);
+            }
+        
+        }catch(IOException e) 
+        {
+            throw new ExcepcionDidacCom("Ha habido un error");
+        }    
+        return idu;
+}	           
+        
     /**
     *
     */
