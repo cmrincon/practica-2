@@ -220,8 +220,8 @@ public class DidacComImpl implements IDidacCom
         IDUDidacCom idu;         //IDU que se facilitará al nivel superior   
         int tries= 0;            //Número de intentos
         byte PDUD_Type;          //Tipo de PDU que se recibirá
-        byte PDUC_Type= PDU_ACK; //Se inicializa a ACK y cambia si hay errores
-        byte lengthData= 0x00;   //Longitud del campo datos del usuario
+        byte PDUC_Type;          //Se inicializa a ACK y cambia si hay errores
+        byte lengthData= 0x00;   //Longitud del campo datos del usuario iniciado
         int PDULength;           //Longitud de la PDU recibida
         
          //Abrir un stream para copiar info en PDUControl más adelante           
@@ -243,7 +243,7 @@ public class DidacComImpl implements IDidacCom
             DatagramPacket datagrama= new DatagramPacket(PDUData, MAX_LONG_PDU);
             do{
                 tries++;
-                
+                PDUC_Type= PDU_ACK;
                 /*   Primer paso, recibir una PDU de datos. Su estructura es la 
                 * siguiente:
                 *           _____________________________________
@@ -277,7 +277,7 @@ public class DidacComImpl implements IDidacCom
                             PDUC_Type= PDU_NACK;
                     }catch (ExcepcionDidacCom e)   {PDUC_Type=PDU_NACK;}
                     
-                    if (PDUC_Type!= PDU_NACK) //Para saltarse código si no.
+                    if (PDUC_Type== PDU_ACK) //Para saltarse código si no.
                     {
                         //Abrir un stream para leer info en PDUData
                         ByteArrayInputStream bais= 
