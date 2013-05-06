@@ -281,7 +281,7 @@ public class DidacComImpl implements IDidacCom
                     {
                         //Abrir un stream para leer info en PDUData
                         ByteArrayInputStream bais= 
-                                           new ByteArrayInputStream(PDUControl);
+                                           new ByteArrayInputStream(PDUData);
                         DataInputStream DataIn= new DataInputStream(bais);
                         PDUD_Type = DataIn.readByte(); //Copia el tipo de PDU
                         lengthData= DataIn.readByte(); //Copia la long. de datos
