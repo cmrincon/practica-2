@@ -326,7 +326,7 @@ public class DidacComImpl implements IDidacCom
         
         }catch(IOException e) 
         {
-            throw new ExcepcionDidacCom("Ha habido un error");
+            throw new ExcepcionDidacCom("Ha habido un error"+e.getCause());
         }    
         return idu;
 }	           
