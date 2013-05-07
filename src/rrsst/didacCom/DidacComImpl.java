@@ -288,7 +288,7 @@ public class DidacComImpl implements IDidacCom
                         PDUD_Type = DataIn.readByte(); //Copia el tipo de PDU
                         lengthData= DataIn.readByte(); //Copia la long. de datos
                         //Si no es de tipo datos
-                        if ((PDUD_Type!= PDU_DATOS))   PDUC_Type= PDU_NACK;
+                        if ((PDUD_Type!= PDU_DATOS))  throw new ExcepcionDidacCom ("Campo de tipo de PDU incorrecto");
                     }
                 }
                 //Serializar los datos para crear la PDU de control
