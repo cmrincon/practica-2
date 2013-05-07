@@ -252,6 +252,8 @@ public class DidacComImpl implements IDidacCom
                 *           -------------------------------------
                 */ 
                 canal.receive(datagrama);   //Se recibe el datagrama
+                InetAddress IP= datagrama.getAddress();
+                int port = datagrama.getPort();              //Puerto para la IDU
                 
                 /*    Después se comprueba si su longitud es correcta, para 
                 * después validar su código hash y más tarde determinar si los 
@@ -299,8 +301,8 @@ public class DidacComImpl implements IDidacCom
                 //Se serializa en PDUControl
                 PDUControl = baos.toByteArray();
                 //Se crea un datagrama que envíe la PDU de control
-                DatagramPacket ControlDatagram = new DatagramPacket(PDUControl,
-                                                                  MIN_LONG_PDU);
+                DatagramPacket ControlDatagram = new DatagramPacket(PDUControl, 
+                                                        MIN_LONG_PDU, IP, port);
                 canal.send(ControlDatagram);    //Se envía la confirmación
     
             }while ((tries<= N_REINTENTOS) && (PDUC_Type== PDU_NACK));
@@ -315,21 +317,22 @@ public class DidacComImpl implements IDidacCom
             }else
             {
                //Extraer datos de la PDU de datos y el datagrama que lo contenía
-               int port = datagrama.getPort();              //Puerto para la IDU
-               String IP = datagrama.getAddress().toString();//IP para la IDU 
+                
                //lengthData es la longitud del campo datos 
                //Byte de datos  en la IDU
                byte[] datos = Arrays.copyOfRange(PDUData, 1,lengthData);
+               String sIP = datagrama.getAddress().toString();//IP para la IDU 
+               int port = datagrama.getPort();              //Puerto para la IDU
                //Se forma la IDU con la información obtenida
-               idu = new IDUDidacCom(IP, port, datos, lengthData);
+               idu = new IDUDidacCom(sIP, port, datos, lengthData);
             }
         
         }catch(IOException e) 
         {
-            throw new ExcepcionDidacCom("Ha habido un error"+e.getCause());
+            throw new ExcepcionDidacCom("Ha habido un error"+ e.getCause());
         }    
         return idu;
-}	           
+}		           
         
     /**
     *
