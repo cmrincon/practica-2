@@ -133,7 +133,7 @@ public class DidacComImpl implements IDidacCom
             PDUData = baos.toByteArray();
             do{
                 tries++;
-                //Se crea un datagrma que envíe la PDU de datos PDUData
+                //Se crea un datagrama que envíe la PDU de datos PDUData
                 DatagramPacket datagrama = new DatagramPacket(PDUData, 
                             PDUData.length, InetAddress.getByName(IP), port);
                 canal.send(datagrama);  //Envío del datagrama con PDUData
@@ -317,12 +317,11 @@ public class DidacComImpl implements IDidacCom
             }else
             {
                //Extraer datos de la PDU de datos y el datagrama que lo contenía
-                
+               String sIP = datagrama.getAddress().getHostAddress();//IP para la IDU 
+               int port = datagrama.getPort();              //Puerto para la IDU 
                //lengthData es la longitud del campo datos 
                //Byte de datos  en la IDU
-               byte[] datos = Arrays.copyOfRange(PDUData, 1,lengthData);
-               String sIP = datagrama.getAddress().toString();//IP para la IDU 
-               int port = datagrama.getPort();              //Puerto para la IDU
+               byte[] datos = Arrays.copyOfRange(PDUData, 2,lengthData+2);
                //Se forma la IDU con la información obtenida
                idu = new IDUDidacCom(sIP, port, datos, lengthData);
             }
@@ -332,7 +331,7 @@ public class DidacComImpl implements IDidacCom
             throw new ExcepcionDidacCom("Ha habido un error"+ e.getCause());
         }    
         return idu;
-}		           
+}	           
         
     /**
     *
